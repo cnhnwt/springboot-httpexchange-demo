@@ -55,7 +55,7 @@ springboot-httpexchange-demo/
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/your-username/springboot-httpexchange-demo.git
+git clone https://github.com/cnhnwt/springboot-httpexchange-demo.git
 cd springboot-httpexchange-demo
 ```
 
