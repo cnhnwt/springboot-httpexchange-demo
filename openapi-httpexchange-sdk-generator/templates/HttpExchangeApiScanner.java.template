@@ -1,0 +1,124 @@
+package @CLIENT_PACKAGE@.config;
+
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.core.type.classreading.CachingMetadataReaderFactory;
+import org.springframework.core.type.classreading.MetadataReader;
+import org.springframework.web.service.annotation.HttpExchange;
+import org.springframework.web.service.annotation.GetExchange;
+import org.springframework.web.service.annotation.PostExchange;
+import org.springframework.web.service.annotation.PutExchange;
+import org.springframework.web.service.annotation.DeleteExchange;
+import org.springframework.web.service.annotation.PatchExchange;
+
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * HttpExchange API 接口扫描器
+ *
+ * <p>扫描指定包下所有标注了 HTTP Exchange 注解的接口</p>
+ *
+ * <p>支持的注解包括：</p>
+ * <ul>
+ *   <li>@HttpExchange - 通用 HTTP 请求注解</li>
+ *   <li>@GetExchange - GET 请求专用注解</li>
+ *   <li>@PostExchange - POST 请求专用注解</li>
+ *   <li>@PutExchange - PUT 请求专用注解</li>
+ *   <li>@DeleteExchange - DELETE 请求专用注解</li>
+ *   <li>@PatchExchange - PATCH 请求专用注解</li>
+ * </ul>
+ *
+ * <p>此类用于自动发现所有 HttpExchange API 接口，以便动态注册为 Spring Bean</p>
+ */
+public class HttpExchangeApiScanner {
+    
+    private final String basePackage;
+    private final PathMatchingResourcePatternResolver resolver;
+    private final CachingMetadataReaderFactory metadataReaderFactory;
+    
+    /**
+     * 构造函数
+     * 
+     * @param basePackage 要扫描的基础包路径
+     */
+    public HttpExchangeApiScanner(String basePackage) {
+        this.basePackage = basePackage;
+        this.resolver = new PathMatchingResourcePatternResolver();
+        this.metadataReaderFactory = new CachingMetadataReaderFactory();
+    }
+    
+    /**
+     * 扫描并返回所有 HttpExchange API 接口
+     * 
+     * @return 所有 HttpExchange API 接口的 Class 对象集合
+     * @throws Exception 如果扫描过程中发生错误
+     */
+    public Set<Class<?>> scan() throws Exception {
+        Set<Class<?>> apiInterfaces = new HashSet<>();
+        String packageSearchPath = "classpath*:" + basePackage.replace('.', '/') + "/**/*.class";
+        
+        Resource[] resources = resolver.getResources(packageSearchPath);
+        for (Resource resource : resources) {
+            if (resource.isReadable()) {
+                MetadataReader metadataReader = metadataReaderFactory.getMetadataReader(resource);
+                
+                // 检查是否为接口
+                if (metadataReader.getClassMetadata().isInterface()) {
+                    String className = metadataReader.getClassMetadata().getClassName();
+                    Class<?> clazz = Class.forName(className);
+                    
+                    // 检查是否有 @HttpExchange 注解（类级别或方法级别）
+                    if (isHttpExchangeInterface(clazz)) {
+                        apiInterfaces.add(clazz);
+                    }
+                }
+            }
+        }
+        
+        return apiInterfaces;
+    }
+    
+    /**
+     * 检查接口是否为 HttpExchange 接口
+     *
+     * <p>检查规则：</p>
+     * <ul>
+     *   <li>类级别有任意 HTTP Exchange 注解</li>
+     *   <li>或任意方法有任意 HTTP Exchange 注解</li>
+     * </ul>
+     *
+     * @param clazz 要检查的接口类
+     * @return 如果是 HttpExchange 接口返回 true，否则返回 false
+     */
+    private boolean isHttpExchangeInterface(Class<?> clazz) {
+        // 检查类级别的注解
+        if (hasHttpExchangeAnnotation(clazz)) {
+            return true;
+        }
+        
+        // 检查方法级别的注解
+        for (var method : clazz.getMethods()) {
+            if (hasHttpExchangeAnnotation(method)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 检查是否有任意 HTTP Exchange 注解
+     *
+     * @param element 要检查的元素（类或方法）
+     * @return 如果有任意 HTTP Exchange 注解返回 true，否则返回 false
+     */
+    private boolean hasHttpExchangeAnnotation(java.lang.reflect.AnnotatedElement element) {
+        return element.isAnnotationPresent(HttpExchange.class)
+            || element.isAnnotationPresent(GetExchange.class)
+            || element.isAnnotationPresent(PostExchange.class)
+            || element.isAnnotationPresent(PutExchange.class)
+            || element.isAnnotationPresent(DeleteExchange.class)
+            || element.isAnnotationPresent(PatchExchange.class);
+    }
+}

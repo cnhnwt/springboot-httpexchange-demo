@@ -1,0 +1,127 @@
+package @CLIENT_PACKAGE@.config;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import java.io.IOException;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 请求头传递拦截器
+ * 
+ * <p>自动将当前请求的特定请求头传递到下游服务</p>
+ * 
+ * <p>支持的传递策略：</p>
+ * <ul>
+ *   <li>配置指定的请求头列表</li>
+ *   <li>传递所有请求头（排除特定的）</li>
+ *   <li>添加静态请求头</li>
+ * </ul>
+ */
+public class @SERVER_ARTIFACT_ID_CAMEL@HeaderPropagationInterceptor implements ClientHttpRequestInterceptor {
+    
+    private static final Logger log = LoggerFactory.getLogger(@SERVER_ARTIFACT_ID_CAMEL@HeaderPropagationInterceptor.class);
+    
+    private final @SERVER_ARTIFACT_ID_CAMEL@ClientProperties.HeadersConfig config;
+    
+    public @SERVER_ARTIFACT_ID_CAMEL@HeaderPropagationInterceptor(@SERVER_ARTIFACT_ID_CAMEL@ClientProperties.HeadersConfig config) {
+        this.config = config;
+    }
+    
+    @Override
+    public ClientHttpResponse intercept(
+            HttpRequest request,
+            byte[] body,
+            ClientHttpRequestExecution execution) throws IOException {
+        
+        if (!config.isPropagationEnabled()) {
+            return execution.execute(request, body);
+        }
+        
+        // 获取当前 HTTP 请求
+        ServletRequestAttributes attributes = 
+            (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        
+        if (attributes != null) {
+            HttpServletRequest currentRequest = attributes.getRequest();
+            
+            if (config.isPropagateAll()) {
+                // 传递所有请求头（排除特定的）
+                propagateAllHeaders(currentRequest, request);
+            } else {
+                // 只传递配置的请求头
+                propagateConfiguredHeaders(currentRequest, request);
+            }
+        }
+        
+        // 添加静态请求头
+        addStaticHeaders(request);
+        
+        if (log.isDebugEnabled()) {
+            log.debug("[@SERVER_ARTIFACT_ID@] Request headers: {}", request.getHeaders());
+        }
+        
+        return execution.execute(request, body);
+    }
+    
+    /**
+     * 传递配置的请求头
+     */
+    private void propagateConfiguredHeaders(HttpServletRequest source, HttpRequest target) {
+        List<String> headersToPropagate = config.getPropagateHeaders();
+        
+        for (String headerName : headersToPropagate) {
+            String headerValue = source.getHeader(headerName);
+            if (headerValue != null && !headerValue.isEmpty()) {
+                target.getHeaders().set(headerName, headerValue);
+                if (log.isDebugEnabled()) {
+                    log.debug("[@SERVER_ARTIFACT_ID@] Propagating header: {} = {}", headerName, 
+                        headerName.equalsIgnoreCase("Authorization") ? "***" : headerValue);
+                }
+            }
+        }
+    }
+    
+    /**
+     * 传递所有请求头
+     */
+    private void propagateAllHeaders(HttpServletRequest source, HttpRequest target) {
+        List<String> excludeHeaders = config.getExcludeHeaders();
+        
+        Enumeration<String> headerNames = source.getHeaderNames();
+        while (headerNames.hasMoreElements()) {
+            String headerName = headerNames.nextElement();
+            
+            if (!excludeHeaders.contains(headerName)) {
+                String headerValue = source.getHeader(headerName);
+                if (headerValue != null && !headerValue.isEmpty()) {
+                    target.getHeaders().set(headerName, headerValue);
+                }
+            }
+        }
+    }
+    
+    /**
+     * 添加静态请求头
+     */
+    private void addStaticHeaders(HttpRequest request) {
+        Map<String, String> staticHeaders = config.getStaticHeaders();
+        
+        for (Map.Entry<String, String> entry : staticHeaders.entrySet()) {
+            request.getHeaders().set(entry.getKey(), entry.getValue());
+            if (log.isDebugEnabled()) {
+                log.debug("[@SERVER_ARTIFACT_ID@] Adding static header: {} = {}", 
+                    entry.getKey(), entry.getValue());
+            }
+        }
+    }
+}

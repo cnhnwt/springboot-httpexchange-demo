@@ -1,0 +1,19 @@
+# 服务器配置
+server:
+  port: 8181
+
+spring:
+  application:
+    name: httpexchange-server
+
+# SpringDoc OpenAPI 配置
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false
+  default-produces-media-type: application/json
+  default-consumes-media-type: application/json

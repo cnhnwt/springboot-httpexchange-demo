@@ -1,0 +1,202 @@
+package @CLIENT_PACKAGE@.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * @SERVER_ARTIFACT_ID@ Client 配置属性
+ * 
+ * <p>配置示例：</p>
+ * <pre>
+ * clients:
+ *   @SERVER_ARTIFACT_ID@:
+ *     base-url: http://localhost:8080
+ *     connect-timeout: 5s
+ *     read-timeout: 30s
+ *     headers:
+ *       propagation-enabled: true
+ *       propagate-headers:
+ *         - Authorization
+ *         - X-Trace-Id
+ * </pre>
+ */
+@ConfigurationProperties(prefix = "clients.@SERVER_ARTIFACT_ID@")
+public class @SERVER_ARTIFACT_ID_CAMEL@ClientProperties {
+    
+    /**
+     * 是否启用此 Client（默认启用）
+     */
+    private boolean enabled = true;
+    
+    /**
+     * 服务基础 URL（默认使用服务名）
+     */
+    private String baseUrl = "http://@SERVER_ARTIFACT_ID@";
+    
+    /**
+     * 连接超时时间
+     */
+    private Duration connectTimeout = Duration.ofSeconds(5);
+    
+    /**
+     * 读取超时时间
+     */
+    private Duration readTimeout = Duration.ofSeconds(30);
+    
+    /**
+     * 是否启用负载均衡
+     */
+    private boolean loadBalancerEnabled = false;
+    
+    /**
+     * 是否启用服务发现
+     */
+    private boolean discoveryEnabled = false;
+    
+    /**
+     * 是否自动注册 API 接口为 Spring Bean（默认启用）
+     *
+     * <p>启用后，所有 HttpExchange API 接口将自动注册为 Spring Bean，支持直接注入</p>
+     * <p>禁用后，需要手动使用 HttpServiceProxyFactory.createClient() 创建客户端</p>
+     */
+    private boolean autoRegisterApis = true;
+    
+    /**
+     * 请求头配置
+     */
+    private HeadersConfig headers = new HeadersConfig();
+    
+    // Getters and Setters
+    
+    public boolean isEnabled() {
+        return enabled;
+    }
+    
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+    
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+    
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+    
+    public Duration getConnectTimeout() {
+        return connectTimeout;
+    }
+    
+    public void setConnectTimeout(Duration connectTimeout) {
+        this.connectTimeout = connectTimeout;
+    }
+    
+    public Duration getReadTimeout() {
+        return readTimeout;
+    }
+    
+    public void setReadTimeout(Duration readTimeout) {
+        this.readTimeout = readTimeout;
+    }
+    
+    public boolean isLoadBalancerEnabled() {
+        return loadBalancerEnabled;
+    }
+    
+    public void setLoadBalancerEnabled(boolean loadBalancerEnabled) {
+        this.loadBalancerEnabled = loadBalancerEnabled;
+    }
+    
+    public boolean isDiscoveryEnabled() {
+        return discoveryEnabled;
+    }
+    
+    public void setDiscoveryEnabled(boolean discoveryEnabled) {
+        this.discoveryEnabled = discoveryEnabled;
+    }
+    
+    public boolean isAutoRegisterApis() {
+        return autoRegisterApis;
+    }
+    
+    public void setAutoRegisterApis(boolean autoRegisterApis) {
+        this.autoRegisterApis = autoRegisterApis;
+    }
+    
+    public HeadersConfig getHeaders() {
+        return headers;
+    }
+    
+    public void setHeaders(HeadersConfig headers) {
+        this.headers = headers;
+    }
+    
+    /**
+     * 请求头配置
+     */
+    public static class HeadersConfig {
+        private boolean propagationEnabled = true;
+        private List<String> propagateHeaders = new ArrayList<>(Arrays.asList(
+            "Authorization",
+            "X-Trace-Id",
+            "X-Span-Id",
+            "X-User-Id",
+            "X-Tenant-Id",
+            "X-Request-Id"
+        ));
+        private Map<String, String> staticHeaders = new HashMap<>();
+        private boolean propagateAll = false;
+        private List<String> excludeHeaders = new ArrayList<>(Arrays.asList(
+            "Host",
+            "Content-Length",
+            "Transfer-Encoding"
+        ));
+        
+        public boolean isPropagationEnabled() {
+            return propagationEnabled;
+        }
+        
+        public void setPropagationEnabled(boolean propagationEnabled) {
+            this.propagationEnabled = propagationEnabled;
+        }
+        
+        public List<String> getPropagateHeaders() {
+            return propagateHeaders;
+        }
+        
+        public void setPropagateHeaders(List<String> propagateHeaders) {
+            this.propagateHeaders = propagateHeaders;
+        }
+        
+        public Map<String, String> getStaticHeaders() {
+            return staticHeaders;
+        }
+        
+        public void setStaticHeaders(Map<String, String> staticHeaders) {
+            this.staticHeaders = staticHeaders;
+        }
+        
+        public boolean isPropagateAll() {
+            return propagateAll;
+        }
+        
+        public void setPropagateAll(boolean propagateAll) {
+            this.propagateAll = propagateAll;
+        }
+        
+        public List<String> getExcludeHeaders() {
+            return excludeHeaders;
+        }
+        
+        public void setExcludeHeaders(List<String> excludeHeaders) {
+            this.excludeHeaders = excludeHeaders;
+        }
+    }
+}

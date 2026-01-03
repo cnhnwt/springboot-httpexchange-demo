@@ -1,0 +1,581 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>org.cnhnwt</groupId>
+        <artifactId>springboot-httpexchange-demo</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    
+    <artifactId>openapi-httpexchange-sdk-generator</artifactId>
+    <packaging>pom</packaging>
+    <name>openapi-httpexchange-sdk-generator</name>
+    <description>OpenAPI HttpExchange SDK 生成器 - 从 OpenAPI 规范一键生成完整的 HttpExchange 客户端 SDK</description>
+    
+    <properties>
+        <!-- 跳过 Spring Boot 打包插件（这不是一个可执行的应用） -->
+        <spring-boot.repackage.skip>true</spring-boot.repackage.skip>
+        
+        <!-- 默认的 OpenAPI 文件路径（可通过命令行覆盖） -->
+        <openapi.file.path></openapi.file.path>
+        
+        <!-- 默认的 OpenAPI URL（可通过命令行覆盖） -->
+        <openapi.url></openapi.url>
+        
+        <!-- 生成的 Client 版本号（默认使用父项目版本） -->
+        <client.version>${project.version}</client.version>
+        
+        <!-- 自定义 Maven settings 文件路径（可选，会自动从 -s 参数获取，也可通过 -Dmaven.settings.path=xxx 手动指定） -->
+        <maven.settings.path></maven.settings.path>
+        
+        <!-- 构建目标：install（默认）或 deploy -->
+        <client.build.goal>install</client.build.goal>
+        
+        <!-- 以下属性将由 Groovy 脚本动态设置 -->
+        <server.artifactId></server.artifactId>
+        <client.artifactId></client.artifactId>
+        <client.package></client.package>
+        <client.output.dir>${project.build.directory}/generated-clients/${client.artifactId}</client.output.dir>
+    </properties>
+    
+    <profiles>
+        <!--
+            统一的 Client 生成 Profile
+            
+            支持两种使用方式：
+            
+            方式 1 - 从本地文件生成：
+            mvn clean install -Dopenapi.file.path=openapi/httpexchange-server@0.0.1-SNAPSHOT.json
+            
+            方式 2 - 从 URL 下载并生成：
+            mvn clean install -Dopenapi.url=http://localhost:8181/v3/api-docs -Dserver.artifactId=httpexchange-server [-Dserver.version=0.0.1-SNAPSHOT]
+            
+            文件命名规则：{server-artifactId}@{version}.json
+            
+            注意：如果没有提供 openapi.file.path 或 openapi.url 参数，此 profile 不会激活，
+            SDK 生成过程会自动跳过。
+        -->
+        <profile>
+            <id>generate-client-from-file</id>
+            <activation>
+                <property>
+                    <name>openapi.file.path</name>
+                </property>
+            </activation>
+            
+            <build>
+                <plugins>
+                    <!-- Step 1: Groovy 脚本执行 -->
+                    <plugin>
+                        <groupId>org.codehaus.gmaven</groupId>
+                        <artifactId>groovy-maven-plugin</artifactId>
+                        <executions>
+                            <!-- 1.1: 下载（如果需要）并解析 OpenAPI 文件 -->
+                            <execution>
+                                <id>download-and-parse-openapi</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>execute</goal>
+                                </goals>
+                                <configuration>
+                                    <source>${project.basedir}/scripts/download-and-parse-openapi.groovy</source>
+                                </configuration>
+                            </execution>
+                            <!-- 1.2: 替换模板占位符 -->
+                            <execution>
+                                <id>replace-template-tokens</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>execute</goal>
+                                </goals>
+                                <configuration>
+                                    <source>${project.basedir}/scripts/replace-template-tokens.groovy</source>
+                                </configuration>
+                            </execution>
+                            <!-- 1.3: 重命名包名（在 OpenAPI Generator 之后） -->
+                            <execution>
+                                <id>rename-packages-after-generation</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>execute</goal>
+                                </goals>
+                                <configuration>
+                                    <source>${project.basedir}/scripts/rename-packages.groovy</source>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    
+                    <!-- Step 2: 创建输出目录 -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>create-output-directories</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <echo message="Creating output directories for ${client.artifactId}"/>
+                                        <mkdir dir="${client.output.dir}"/>
+                                        <mkdir dir="${client.output.dir}/src/main/java"/>
+                                        <mkdir dir="${client.output.dir}/src/main/resources"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    
+                    <!-- Step 3: 使用 OpenAPI Generator 生成 Model 和 API 接口 -->
+                    <plugin>
+                        <groupId>org.openapitools</groupId>
+                        <artifactId>openapi-generator-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>generate-client-code</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- 使用绝对路径，因为 openapi.file.path 可能是相对路径 -->
+                                    <inputSpec>${openapi.spec.file}</inputSpec>
+                                    <generatorName>spring</generatorName>
+                                    <output>${client.output.dir}/generated</output>
+                                    <!-- 使用自定义模板目录 -->
+                                    <templateDirectory>${project.basedir}/openapi-templates</templateDirectory>
+                                    <!-- 使用固定包名，稍后通过脚本重命名 -->
+                                    <apiPackage>org.cnhnwt.client.generated.api</apiPackage>
+                                    <modelPackage>org.cnhnwt.client.generated.model</modelPackage>
+                                    <generateApis>true</generateApis>
+                                    <generateModels>true</generateModels>
+                                    <generateApiTests>false</generateApiTests>
+                                    <generateModelTests>false</generateModelTests>
+                                    <generateApiDocumentation>false</generateApiDocumentation>
+                                    <generateModelDocumentation>false</generateModelDocumentation>
+                                    <generateSupportingFiles>false</generateSupportingFiles>
+                                    <configOptions>
+                                        <useJakartaEe>true</useJakartaEe>
+                                        <dateLibrary>java8</dateLibrary>
+                                        <openApiNullable>false</openApiNullable>
+                                        <serializationLibrary>jackson</serializationLibrary>
+                                        <hideGenerationTimestamp>true</hideGenerationTimestamp>
+                                        <useSpringBoot3>true</useSpringBoot3>
+                                        <interfaceOnly>true</interfaceOnly>
+                                        <skipDefaultInterface>true</skipDefaultInterface>
+                                        <useTags>true</useTags>
+                                    </configOptions>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    
+                    <!-- Step 4: 复制生成的代码到最终目录 -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <executions>
+                            <!-- 复制生成的 Model 和 API -->
+                            <execution>
+                                <id>copy-generated-code</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${client.output.dir}/src/main/java</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${client.output.dir}/generated/src/main/java</directory>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                            
+                            <!-- 复制生成的配置类 -->
+                            <execution>
+                                <id>copy-config-classes</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${client.output.dir}/src/main/java</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}/generated-sources/templates/java</directory>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                            
+                            <!-- 复制 Spring Boot 自动配置文件 -->
+                            <execution>
+                                <id>copy-spring-factories</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${client.output.dir}/src/main/resources</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}/generated-sources/templates/resources</directory>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                            
+                            <!-- 复制 POM 文件 -->
+                            <execution>
+                                <id>copy-pom</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${client.output.dir}</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}/generated-sources/templates</directory>
+                                            <includes>
+                                                <include>pom.xml</include>
+                                            </includes>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    
+                    <!-- Step 5: 自动构建和安装/部署生成的 Client -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>build-generated-client</id>
+                                <phase>install</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>sh</executable>
+                                    <workingDirectory>${project.build.directory}/generated-clients</workingDirectory>
+                                    <environmentVariables>
+                                        <CLIENT_BUILD_GOAL>${client.build.goal}</CLIENT_BUILD_GOAL>
+                                        <MVNW_PATH>${project.basedir}/../mvnw</MVNW_PATH>
+                                        <SETTINGS_FILE_PATH>${project.build.directory}/maven-settings-path.txt</SETTINGS_FILE_PATH>
+                                    </environmentVariables>
+                                    <arguments>
+                                        <argument>-c</argument>
+                                        <argument>
+                                            SETTINGS_ARG=""
+                                            if [ -f "$SETTINGS_FILE_PATH" ]; then
+                                                MAVEN_SETTINGS_PATH=$(cat "$SETTINGS_FILE_PATH")
+                                                if [ -n "$MAVEN_SETTINGS_PATH" ]; then
+                                                    SETTINGS_ARG="-s $MAVEN_SETTINGS_PATH"
+                                                    echo "使用自定义 Maven settings: $MAVEN_SETTINGS_PATH"
+                                                fi
+                                            fi
+                                            echo "执行子构建: $MVNW_PATH clean $CLIENT_BUILD_GOAL -DskipTests $SETTINGS_ARG"
+                                            $MVNW_PATH clean $CLIENT_BUILD_GOAL -DskipTests $SETTINGS_ARG
+                                        </argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        
+        <!-- 从 URL 生成的 Profile -->
+        <profile>
+            <id>generate-client-from-url</id>
+            <activation>
+                <property>
+                    <name>openapi.url</name>
+                </property>
+            </activation>
+            
+            <build>
+                <plugins>
+                    <!-- Step 1: Groovy 脚本执行 -->
+                    <plugin>
+                        <groupId>org.codehaus.gmaven</groupId>
+                        <artifactId>groovy-maven-plugin</artifactId>
+                        <executions>
+                            <!-- 1.1: 下载（如果需要）并解析 OpenAPI 文件 -->
+                            <execution>
+                                <id>download-and-parse-openapi</id>
+                                <phase>initialize</phase>
+                                <goals>
+                                    <goal>execute</goal>
+                                </goals>
+                                <configuration>
+                                    <source>${project.basedir}/scripts/download-and-parse-openapi.groovy</source>
+                                </configuration>
+                            </execution>
+                            <!-- 1.2: 替换模板占位符 -->
+                            <execution>
+                                <id>replace-template-tokens</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>execute</goal>
+                                </goals>
+                                <configuration>
+                                    <source>${project.basedir}/scripts/replace-template-tokens.groovy</source>
+                                </configuration>
+                            </execution>
+                            <!-- 1.3: 重命名包名（在 OpenAPI Generator 之后） -->
+                            <execution>
+                                <id>rename-packages-after-generation</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>execute</goal>
+                                </goals>
+                                <configuration>
+                                    <source>${project.basedir}/scripts/rename-packages.groovy</source>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    
+                    <!-- Step 2: 创建输出目录 -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>create-output-directories</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <echo message="Creating output directories for ${client.artifactId}"/>
+                                        <mkdir dir="${client.output.dir}"/>
+                                        <mkdir dir="${client.output.dir}/src/main/java"/>
+                                        <mkdir dir="${client.output.dir}/src/main/resources"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    
+                    <!-- Step 3: 使用 OpenAPI Generator 生成 Model 和 API 接口 -->
+                    <plugin>
+                        <groupId>org.openapitools</groupId>
+                        <artifactId>openapi-generator-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>generate-client-code</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- 使用绝对路径，因为 openapi.file.path 可能是相对路径 -->
+                                    <inputSpec>${openapi.spec.file}</inputSpec>
+                                    <generatorName>spring</generatorName>
+                                    <output>${client.output.dir}/generated</output>
+                                    <!-- 使用自定义模板目录 -->
+                                    <templateDirectory>${project.basedir}/openapi-templates</templateDirectory>
+                                    <!-- 使用固定包名，稍后通过脚本重命名 -->
+                                    <apiPackage>org.cnhnwt.client.generated.api</apiPackage>
+                                    <modelPackage>org.cnhnwt.client.generated.model</modelPackage>
+                                    <generateApis>true</generateApis>
+                                    <generateModels>true</generateModels>
+                                    <generateApiTests>false</generateApiTests>
+                                    <generateModelTests>false</generateModelTests>
+                                    <generateApiDocumentation>false</generateApiDocumentation>
+                                    <generateModelDocumentation>false</generateModelDocumentation>
+                                    <generateSupportingFiles>false</generateSupportingFiles>
+                                    <configOptions>
+                                        <useJakartaEe>true</useJakartaEe>
+                                        <dateLibrary>java8</dateLibrary>
+                                        <openApiNullable>false</openApiNullable>
+                                        <serializationLibrary>jackson</serializationLibrary>
+                                        <hideGenerationTimestamp>true</hideGenerationTimestamp>
+                                        <useSpringBoot3>true</useSpringBoot3>
+                                        <interfaceOnly>true</interfaceOnly>
+                                        <skipDefaultInterface>true</skipDefaultInterface>
+                                        <useTags>true</useTags>
+                                    </configOptions>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    
+                    <!-- Step 4: 复制生成的代码到最终目录 -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <executions>
+                            <!-- 复制生成的 Model 和 API -->
+                            <execution>
+                                <id>copy-generated-code</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${client.output.dir}/src/main/java</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${client.output.dir}/generated/src/main/java</directory>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                            
+                            <!-- 复制生成的配置类 -->
+                            <execution>
+                                <id>copy-config-classes</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${client.output.dir}/src/main/java</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}/generated-sources/templates/java</directory>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                            
+                            <!-- 复制 Spring Boot 自动配置文件 -->
+                            <execution>
+                                <id>copy-spring-factories</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${client.output.dir}/src/main/resources</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}/generated-sources/templates/resources</directory>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                            
+                            <!-- 复制 POM 文件 -->
+                            <execution>
+                                <id>copy-pom</id>
+                                <phase>process-sources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${client.output.dir}</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.build.directory}/generated-sources/templates</directory>
+                                            <includes>
+                                                <include>pom.xml</include>
+                                            </includes>
+                                            <filtering>false</filtering>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    
+                    <!-- Step 5: 自动构建和安装/部署生成的 Client -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>build-generated-client</id>
+                                <phase>install</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>sh</executable>
+                                    <workingDirectory>${project.build.directory}/generated-clients</workingDirectory>
+                                    <environmentVariables>
+                                        <CLIENT_BUILD_GOAL>${client.build.goal}</CLIENT_BUILD_GOAL>
+                                        <MVNW_PATH>${project.basedir}/../mvnw</MVNW_PATH>
+                                        <SETTINGS_FILE_PATH>${project.build.directory}/maven-settings-path.txt</SETTINGS_FILE_PATH>
+                                    </environmentVariables>
+                                    <arguments>
+                                        <argument>-c</argument>
+                                        <argument>
+                                            SETTINGS_ARG=""
+                                            if [ -f "$SETTINGS_FILE_PATH" ]; then
+                                                MAVEN_SETTINGS_PATH=$(cat "$SETTINGS_FILE_PATH")
+                                                if [ -n "$MAVEN_SETTINGS_PATH" ]; then
+                                                    SETTINGS_ARG="-s $MAVEN_SETTINGS_PATH"
+                                                    echo "使用自定义 Maven settings: $MAVEN_SETTINGS_PATH"
+                                                fi
+                                            fi
+                                            echo "执行子构建: $MVNW_PATH clean $CLIENT_BUILD_GOAL -DskipTests $SETTINGS_ARG"
+                                            $MVNW_PATH clean $CLIENT_BUILD_GOAL -DskipTests $SETTINGS_ARG
+                                        </argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+    
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- Groovy Maven Plugin -->
+                <plugin>
+                    <groupId>org.codehaus.gmaven</groupId>
+                    <artifactId>groovy-maven-plugin</artifactId>
+                    <version>2.1.1</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.codehaus.groovy</groupId>
+                            <artifactId>groovy-all</artifactId>
+                            <version>3.0.19</version>
+                            <type>pom</type>
+                        </dependency>
+                    </dependencies>
+                </plugin>
+                
+                <!-- Exec Maven Plugin -->
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>3.1.0</version>
+                </plugin>
+                
+                <!-- Maven Invoker Plugin -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-invoker-plugin</artifactId>
+                    <version>3.6.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

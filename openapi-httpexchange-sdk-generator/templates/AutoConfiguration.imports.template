@@ -1,0 +1,1 @@
+@CLIENT_PACKAGE@.config.@SERVER_ARTIFACT_ID_CAMEL@AutoConfiguration

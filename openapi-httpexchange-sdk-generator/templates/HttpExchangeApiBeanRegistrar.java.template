@@ -1,0 +1,106 @@
+package @CLIENT_PACKAGE@.config;
+
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.support.BeanDefinitionBuilder;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
+
+import java.util.Set;
+
+/**
+ * HttpExchange API Bean 注册器
+ * 
+ * <p>动态注册所有 HttpExchange API 接口为 Spring Bean，支持懒加载</p>
+ * 
+ * <p>工作流程：</p>
+ * <ol>
+ *   <li>在应用启动时扫描所有 HttpExchange API 接口</li>
+ *   <li>为每个接口创建懒加载的 Bean Definition</li>
+ *   <li>Bean 在首次使用时通过 HttpServiceProxyFactory 创建</li>
+ *   <li>创建后的实例被 Spring 容器缓存</li>
+ * </ol>
+ */
+public class HttpExchangeApiBeanRegistrar implements BeanDefinitionRegistryPostProcessor {
+    
+    private final String basePackage;
+    private final String proxyFactoryBeanName;
+    
+    /**
+     * 构造函数
+     * 
+     * @param basePackage 要扫描的基础包路径
+     * @param proxyFactoryBeanName HttpServiceProxyFactory Bean 的名称
+     */
+    public HttpExchangeApiBeanRegistrar(String basePackage, String proxyFactoryBeanName) {
+        this.basePackage = basePackage;
+        this.proxyFactoryBeanName = proxyFactoryBeanName;
+    }
+    
+    @Override
+    public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
+        try {
+            // 扫描所有 HttpExchange API 接口
+            HttpExchangeApiScanner scanner = new HttpExchangeApiScanner(basePackage);
+            Set<Class<?>> apiInterfaces = scanner.scan();
+            
+            // 为每个接口注册 Bean Definition
+            for (Class<?> apiInterface : apiInterfaces) {
+                registerApiBean(registry, apiInterface);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to scan and register HttpExchange API beans", e);
+        }
+    }
+    
+    /**
+     * 注册单个 API 接口为 Bean
+     * 
+     * <p>使用 Factory Method 模式，通过 HttpServiceProxyFactory.createClient() 创建实例</p>
+     * 
+     * @param registry Bean 定义注册表
+     * @param apiInterface API 接口类
+     */
+    private void registerApiBean(BeanDefinitionRegistry registry, Class<?> apiInterface) {
+        String beanName = generateBeanName(apiInterface);
+        
+        // 如果 Bean 已存在，跳过注册
+        if (registry.containsBeanDefinition(beanName)) {
+            return;
+        }
+        
+        // 创建 Bean Definition
+        // 使用 setFactoryMethodOnBean 指定通过 HttpServiceProxyFactory.createClient() 创建实例
+        BeanDefinitionBuilder builder = BeanDefinitionBuilder
+            .genericBeanDefinition(apiInterface)
+            .setLazyInit(true)  // 启用懒加载
+            .setFactoryMethodOnBean("createClient", proxyFactoryBeanName)
+            .addConstructorArgValue(apiInterface);
+        
+        BeanDefinition beanDefinition = builder.getBeanDefinition();
+        
+        // 注册 Bean
+        registry.registerBeanDefinition(beanName, beanDefinition);
+    }
+    
+    /**
+     * 生成 Bean 名称
+     * 
+     * <p>将接口名称的首字母小写作为 Bean 名称</p>
+     * <p>例如：UserControllerApi -> userControllerApi</p>
+     * 
+     * @param apiInterface API 接口类
+     * @return Bean 名称
+     */
+    private String generateBeanName(Class<?> apiInterface) {
+        String simpleName = apiInterface.getSimpleName();
+        return Character.toLowerCase(simpleName.charAt(0)) + simpleName.substring(1);
+    }
+    
+    @Override
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
+        // 不需要实现
+    }
+}

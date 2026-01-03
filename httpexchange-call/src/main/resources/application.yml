@@ -1,0 +1,37 @@
+# 服务器配置
+server:
+  port: 8282
+
+spring:
+  application:
+    name: httpexchange-call
+
+# HttpExchange Server Client 自动配置
+# 使用自动生成的 httpexchange-server-client 配置
+clients:
+  httpexchange-server:
+    enabled: true
+    base-url: http://localhost:8181
+    connect-timeout: 5s
+    read-timeout: 30s
+    # API 自动注册配置（启用后支持直接注入 API 接口，默认已启用）
+    auto-register-apis: true
+    # 请求头传递配置
+    headers:
+      propagation-enabled: true
+      propagate-headers:
+        - Authorization
+        - X-Trace-Id
+        - X-User-Id
+
+# SpringDoc OpenAPI 配置
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+  show-actuator: false
+  default-produces-media-type: application/json
+  default-consumes-media-type: application/json

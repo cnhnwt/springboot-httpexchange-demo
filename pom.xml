@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.1</version>
+        <relativePath/>
+    </parent>
+    
+    <groupId>org.cnhnwt</groupId>
+    <artifactId>springboot-httpexchange-demo</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    
+    <name>springboot-httpexchange-demo</name>
+    <description>Spring Boot HttpExchange Demo - 演示使用 HttpExchange 技术实现微服务间远程调用</description>
+    
+    <modules>
+        <module>httpexchange-dependencies</module>
+        <module>httpexchange-server</module>
+        <module>openapi-httpexchange-sdk-generator</module>
+        <module>httpexchange-call</module>
+    </modules>
+    
+    <properties>
+        <java.version>21</java.version>
+        <springdoc.version>3.0.1</springdoc.version>
+        <openapi-generator.version>7.10.0</openapi-generator.version>
+        <therapi-javadoc.version>0.15.0</therapi-javadoc.version>
+    </properties>
+    
+    <dependencyManagement>
+        <dependencies>
+            <!-- 引入统一依赖管理 BOM -->
+            <dependency>
+                <groupId>org.cnhnwt</groupId>
+                <artifactId>httpexchange-dependencies</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                </plugin>
+                <plugin>
+                    <groupId>org.openapitools</groupId>
+                    <artifactId>openapi-generator-maven-plugin</artifactId>
+                    <version>${openapi-generator.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

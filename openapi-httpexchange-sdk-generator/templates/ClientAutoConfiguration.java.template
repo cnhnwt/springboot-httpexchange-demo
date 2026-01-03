@@ -1,0 +1,201 @@
+package @CLIENT_PACKAGE@.config;
+
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.context.annotation.Bean;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
+
+/**
+ * @SERVER_ARTIFACT_ID@ Client 自动配置
+ *
+ * <p>支持两种使用方式：</p>
+ *
+ * <h3>方式一：直接注入 API 接口（推荐）</h3>
+ * <pre>
+ * {@code @Autowired}
+ * private UserControllerApi userClient;
+ *
+ * // 直接使用，无需手动创建
+ * userClient.getAllUsers();
+ * </pre>
+ *
+ * <h3>方式二：使用 HttpServiceProxyFactory（高级用法）</h3>
+ * <pre>
+ * {@code @Autowired}
+ * private HttpServiceProxyFactory @SERVER_ARTIFACT_ID_CAMEL_LOWER@ProxyFactory;
+ *
+ * // 手动创建客户端
+ * YourApiClient client = @SERVER_ARTIFACT_ID_CAMEL_LOWER@ProxyFactory.createClient(YourApiClient.class);
+ * </pre>
+ *
+ * <h3>配置示例：</h3>
+ * <pre>
+ * # application.yml
+ * clients:
+ *   @SERVER_ARTIFACT_ID@:
+ *     enabled: true
+ *     base-url: http://localhost:8080
+ *     auto-register-apis: true  # 启用 API 自动注册（默认启用）
+ *     connect-timeout: 5s
+ *     read-timeout: 30s
+ *     headers:
+ *       propagation-enabled: true
+ *       propagate-headers:
+ *         - Authorization
+ *         - X-Trace-Id
+ * </pre>
+ *
+ * @see @SERVER_ARTIFACT_ID_CAMEL@ClientProperties
+ */
+@AutoConfiguration
+@EnableConfigurationProperties(@SERVER_ARTIFACT_ID_CAMEL@ClientProperties.class)
+@ConditionalOnProperty(
+    prefix = "clients.@SERVER_ARTIFACT_ID@",
+    name = "enabled",
+    havingValue = "true",
+    matchIfMissing = true
+)
+public class @SERVER_ARTIFACT_ID_CAMEL@AutoConfiguration {
+    
+    /**
+     * 创建请求头传递拦截器
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "@SERVER_ARTIFACT_ID_CAMEL_LOWER@HeaderPropagationInterceptor")
+    @ConditionalOnProperty(
+        prefix = "clients.@SERVER_ARTIFACT_ID@.headers",
+        name = "propagation-enabled",
+        havingValue = "true",
+        matchIfMissing = true
+    )
+    public @SERVER_ARTIFACT_ID_CAMEL@HeaderPropagationInterceptor @SERVER_ARTIFACT_ID_CAMEL_LOWER@HeaderPropagationInterceptor(
+            @SERVER_ARTIFACT_ID_CAMEL@ClientProperties properties) {
+        return new @SERVER_ARTIFACT_ID_CAMEL@HeaderPropagationInterceptor(properties.getHeaders());
+    }
+    
+    /**
+     * 创建 RestClient（不使用负载均衡）
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "@SERVER_ARTIFACT_ID_CAMEL_LOWER@RestClient")
+    @ConditionalOnProperty(
+        prefix = "clients.@SERVER_ARTIFACT_ID@",
+        name = "load-balancer-enabled",
+        havingValue = "false",
+        matchIfMissing = true
+    )
+    public RestClient @SERVER_ARTIFACT_ID_CAMEL_LOWER@RestClient(
+            @SERVER_ARTIFACT_ID_CAMEL@ClientProperties properties,
+            @SERVER_ARTIFACT_ID_CAMEL@HeaderPropagationInterceptor headerInterceptor) {
+        
+        RestClient.Builder builder = RestClient.builder()
+            .baseUrl(properties.getBaseUrl());
+        
+        // 添加请求头拦截器
+        if (headerInterceptor != null) {
+            builder.requestInterceptor(headerInterceptor);
+        }
+        
+        return builder.build();
+    }
+    
+    /**
+     * 创建 RestClient Builder（使用负载均衡）
+     */
+    @Bean
+    @LoadBalanced
+    @ConditionalOnMissingBean(name = "@SERVER_ARTIFACT_ID_CAMEL_LOWER@LoadBalancedRestClientBuilder")
+    @ConditionalOnClass(name = "org.springframework.cloud.client.loadbalancer.LoadBalanced")
+    @ConditionalOnProperty(
+        prefix = "clients.@SERVER_ARTIFACT_ID@",
+        name = "load-balancer-enabled",
+        havingValue = "true"
+    )
+    public RestClient.Builder @SERVER_ARTIFACT_ID_CAMEL_LOWER@LoadBalancedRestClientBuilder() {
+        return RestClient.builder();
+    }
+    
+    /**
+     * 创建 RestClient（使用负载均衡）
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "@SERVER_ARTIFACT_ID_CAMEL_LOWER@RestClient")
+    @ConditionalOnProperty(
+        prefix = "clients.@SERVER_ARTIFACT_ID@",
+        name = "load-balancer-enabled",
+        havingValue = "true"
+    )
+    public RestClient @SERVER_ARTIFACT_ID_CAMEL_LOWER@LoadBalancedRestClient(
+            RestClient.Builder @SERVER_ARTIFACT_ID_CAMEL_LOWER@LoadBalancedRestClientBuilder,
+            @SERVER_ARTIFACT_ID_CAMEL@ClientProperties properties,
+            @SERVER_ARTIFACT_ID_CAMEL@HeaderPropagationInterceptor headerInterceptor) {
+        
+        RestClient.Builder builder = @SERVER_ARTIFACT_ID_CAMEL_LOWER@LoadBalancedRestClientBuilder
+            .baseUrl(properties.getBaseUrl());
+        
+        // 添加请求头拦截器
+        if (headerInterceptor != null) {
+            builder.requestInterceptor(headerInterceptor);
+        }
+        
+        return builder.build();
+    }
+    
+    /**
+     * 创建 HttpServiceProxyFactory
+     *
+     * <p>此 Bean 用于：</p>
+     * <ul>
+     *   <li>高级用户手动创建客户端</li>
+     *   <li>作为自动注册 API Bean 的工厂</li>
+     * </ul>
+     *
+     * <p>使用示例：</p>
+     * <pre>
+     * YourApiClient client = proxyFactory.createClient(YourApiClient.class);
+     * </pre>
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "@SERVER_ARTIFACT_ID_CAMEL_LOWER@ProxyFactory")
+    public HttpServiceProxyFactory @SERVER_ARTIFACT_ID_CAMEL_LOWER@ProxyFactory(
+            RestClient @SERVER_ARTIFACT_ID_CAMEL_LOWER@RestClient) {
+        return HttpServiceProxyFactory
+            .builderFor(RestClientAdapter.create(@SERVER_ARTIFACT_ID_CAMEL_LOWER@RestClient))
+            .build();
+    }
+    
+    /**
+     * 创建 API Bean 注册器
+     *
+     * <p>自动扫描并注册所有 HttpExchange API 接口为 Spring Bean</p>
+     * <p>支持懒加载，仅在首次使用时创建实例</p>
+     *
+     * <p>工作流程：</p>
+     * <ol>
+     *   <li>扫描 @CLIENT_PACKAGE@.api 包下的所有接口</li>
+     *   <li>检查接口是否有 @HttpExchange 注解</li>
+     *   <li>为符合条件的接口注册懒加载 Bean</li>
+     *   <li>Bean 在首次使用时通过 HttpServiceProxyFactory 创建</li>
+     * </ol>
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "@SERVER_ARTIFACT_ID_CAMEL_LOWER@ApiBeanRegistrar")
+    @ConditionalOnProperty(
+        prefix = "clients.@SERVER_ARTIFACT_ID@",
+        name = "auto-register-apis",
+        havingValue = "true",
+        matchIfMissing = true
+    )
+    public HttpExchangeApiBeanRegistrar @SERVER_ARTIFACT_ID_CAMEL_LOWER@ApiBeanRegistrar() {
+        return new HttpExchangeApiBeanRegistrar(
+            "@CLIENT_PACKAGE@.api",
+            "@SERVER_ARTIFACT_ID_CAMEL_LOWER@ProxyFactory"
+        );
+    }
+}

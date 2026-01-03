@@ -1,0 +1,2 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+@CLIENT_PACKAGE@.config.@SERVER_ARTIFACT_ID_CAMEL@ClientAutoConfiguration
