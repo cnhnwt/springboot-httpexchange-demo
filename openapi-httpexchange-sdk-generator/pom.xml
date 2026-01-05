@@ -517,7 +517,7 @@
                                     <workingDirectory>${project.build.directory}/generated-clients</workingDirectory>
                                     <environmentVariables>
                                         <CLIENT_BUILD_GOAL>${client.build.goal}</CLIENT_BUILD_GOAL>
-                                        <MVNW_PATH>${project.basedir}/../mvnw</MVNW_PATH>
+                                        <MVNW_PATH>mvn</MVNW_PATH>
                                         <SETTINGS_FILE_PATH>${project.build.directory}/maven-settings-path.txt</SETTINGS_FILE_PATH>
                                     </environmentVariables>
                                     <arguments>
