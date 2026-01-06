@@ -1,4 +1,4 @@
-name: Build & Push Docker Images
+name: Build Multi-Arch Docker Images
 
 on:
   push:
@@ -7,17 +7,15 @@ on:
       - 'openapi-httpexchange-sdk-generator/**'
       - 'pom.xml'
       - 'src/**'
-      - '**/Dockerfile' # 增加：如果修改了 Dockerfile 也触发
+      - '**/Dockerfile'
   workflow_dispatch:
 
-# 【权限关键】允许读取代码 + 写入 Docker 镜像到 GitHub Packages
 permissions:
   contents: read
   packages: write
 
 env:
   REGISTRY: ghcr.io
-  # 基础镜像名 (ghcr.io/用户名/仓库名)
   BASE_IMAGE_NAME: ${{ github.repository }}
 
 jobs:
@@ -25,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    # --- 阶段一：环境准备 ---
+    # --- 阶段一：Maven 构建 (保持不变) ---
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -36,28 +34,32 @@ jobs:
         distribution: 'temurin'
         cache: 'maven'
 
-    # --- 阶段二：Maven 构建 (使用你验证过的逻辑) ---
-    
-    # 1. 第一次构建：安装依赖 + 构建 Server 模块 (排除 Call 模块)
-    # 这步运行完，httpexchange-server/target/ 下面会有 jar 包
+    # Maven 步骤 1: 安装依赖 & 构建 Server
     - name: Install Dependencies (Exclude Consumer)
       run: mvn clean install -DskipTests -pl '!httpexchange-call'
 
-    # 2. 生成 SDK (生成 jar 并安装到本地仓库)
+    # Maven 步骤 2: 生成 SDK
     - name: Generate SDK from OpenAPI
       working-directory: ./openapi-httpexchange-sdk-generator
       run: |
         mvn clean install \
           -Dopenapi.file.path=openapi/httpexchange-server@0.0.1-SNAPSHOT.json
 
-    # 3. 构建 Call 模块
-    # 这步运行完，httpexchange-call/target/ 下面会有 jar 包
+    # Maven 步骤 3: 构建 Call 模块
     - name: Build Consumer Module (httpexchange-call)
       run: mvn package -pl httpexchange-call -am -DskipTests
 
-    # --- 阶段三：Docker 构建与推送 ---
+    # --- 阶段二：配置 Docker 多架构构建环境 (新增) ---
 
-    # 4. 登录 GitHub 容器仓库
+    # 1. 配置 QEMU (支持 ARM 架构模拟)
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    # 2. 配置 Buildx (多架构构建工具)
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # 3. 登录仓库
     - name: Log in to the Container registry
       uses: docker/login-action@v3
       with:
@@ -65,7 +67,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    # 5. 构建并推送 Server 镜像
+    # --- 阶段三：构建并推送多架构镜像 ---
+
+    # Server 镜像
     - name: Extract metadata (Server)
       id: meta-server
       uses: docker/metadata-action@v5
@@ -73,16 +77,18 @@ jobs:
         images: ${{ env.REGISTRY }}/${{ env.BASE_IMAGE_NAME }}-server
         tags: type=raw,value=latest,enable={{is_default_branch}}
 
-    - name: Build and push (Server)
+    - name: Build and push (Server Multi-Arch)
       uses: docker/build-push-action@v5
       with:
-        context: ./httpexchange-server    # 指定上下文为 server 子目录
+        context: ./httpexchange-server
         file: ./httpexchange-server/Dockerfile
         push: true
+        # 【关键】指定多平台
+        platforms: linux/amd64,linux/arm64
         tags: ${{ steps.meta-server.outputs.tags }}
         labels: ${{ steps.meta-server.outputs.labels }}
 
-    # 6. 构建并推送 Call 镜像
+    # Call 镜像
     - name: Extract metadata (Call)
       id: meta-call
       uses: docker/metadata-action@v5
@@ -90,11 +96,13 @@ jobs:
         images: ${{ env.REGISTRY }}/${{ env.BASE_IMAGE_NAME }}-call
         tags: type=raw,value=latest,enable={{is_default_branch}}
 
-    - name: Build and push (Call)
+    - name: Build and push (Call Multi-Arch)
       uses: docker/build-push-action@v5
       with:
-        context: ./httpexchange-call      # 指定上下文为 call 子目录
+        context: ./httpexchange-call
         file: ./httpexchange-call/Dockerfile
         push: true
+        # 【关键】指定多平台
+        platforms: linux/amd64,linux/arm64
         tags: ${{ steps.meta-call.outputs.tags }}
         labels: ${{ steps.meta-call.outputs.labels }}
